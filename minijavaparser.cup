@@ -1,0 +1,332 @@
+import java_cup.runtime.*;
+import java.util.*;
+import syntaxtree.*;
+
+scan with {: return lexer.next_token(); :};
+parser code {:
+	Lexer lexer;
+	public Parser(Lexer lex) {
+		super(lex);
+		lexer = lex;
+	}
+	
+	private Hashtable<String, Integer> st = new Hashtable<String, Integer>();
+	
+	public void syntax_error(Symbol cur_token)
+	{
+		System.err.println("Parse error at line " + cur_token.left + ", column " + cur_token.right);
+	}  
+	
+	/*RMVBL
+	public void report_error(String message, Object info) {   
+        System.err.println("\n~~\nIn report_error\n~~\n");  
+        System.err.println(lexer.yystate());
+        System.err.println(message);   
+    }     
+    public void report_fatal_error(String message, Object info) {   
+        report_error(message, info);   
+        System.exit(1);   
+    }  
+    */
+:};
+
+/*Terminals*/
+terminal String IDENTIFIER;
+terminal Integer INTEGER_LITERAL;
+terminal LBRACE;
+terminal RBRACE;
+terminal LBRACKET;
+terminal RBRACKET;
+terminal LPAREN;
+terminal RPAREN;
+terminal SEMICOLON;
+terminal COMMA;
+terminal CLASS;
+terminal PUBLIC;
+terminal STATIC;
+terminal VOID;
+terminal MAIN;
+terminal STRING;
+terminal RETURN;
+terminal EXTENDS;
+terminal BOOLEAN;
+terminal INTEGER;
+terminal IF;
+terminal ELSE;
+terminal WHILE;
+terminal PRINT;
+terminal EQUALS;
+terminal PERIOD;
+terminal LENGTH;
+terminal TRUE;
+terminal FALSE;
+terminal NEW;
+terminal THIS;
+terminal EXCLAMATION;
+terminal LESSTHAN;
+terminal AND;
+terminal PLUS;
+terminal MINUS;
+terminal TIMES;
+
+/*Nonterminals*/
+
+non terminal Program program;
+non terminal MainClass Main_Class;
+non terminal ClassDeclList ClassDecl;
+non terminal VarDeclList VarDecl;
+non terminal MethodDeclList MethodDecl;
+non terminal FormalList Formal_List;
+non terminal FormalList FormalRest;
+non terminal Type type;
+non terminal Statement statement;
+non terminal StatementList Statement_List;
+non terminal Exp Expr;
+non terminal ExpList ExprList;
+non terminal ExpList ExprRest;
+
+/*Grammar*/
+precedence left PLUS, MINUS;
+precedence left TIMES;
+precedence left LESSTHAN, AND;
+precedence left EXCLAMATION;
+precedence left PERIOD;
+
+start with program;
+
+program ::= Main_Class:m ClassDecl:c 
+				{:
+					RESULT = new Program(m, c);
+				:}
+			;
+
+Main_Class ::= CLASS IDENTIFIER:i1 LBRACE PUBLIC STATIC VOID MAIN LPAREN STRING LBRACKET RBRACKET IDENTIFIER:i2 RPAREN LBRACE statement:s RBRACE RBRACE
+				{:
+					RESULT = new MainClass(new Identifier(i1), new Identifier(i2), s);
+				:}
+			;
+
+ClassDecl ::= ClassDecl:cl CLASS IDENTIFIER:i LBRACE VarDecl:v MethodDecl:m RBRACE
+				{:
+					if (cl == null) cl = new ClassDeclList();
+					cl.addElement(new ClassDeclSimple(new Identifier(i), v, m));
+					RESULT = cl;
+				:}
+			|
+			  ClassDecl:cl CLASS IDENTIFIER:i1 EXTENDS IDENTIFIER:i2 LBRACE VarDecl:v MethodDecl:m RBRACE
+				{:
+			  		if (cl == null) cl = new ClassDeclList();
+					cl.addElement(new ClassDeclExtends(new Identifier(i1), new Identifier(i2), v, m));
+					RESULT = cl;
+				:}
+			|
+				{:
+			  		RESULT = new ClassDeclList();
+				:}
+			;
+
+VarDecl ::= VarDecl:vl type:t IDENTIFIER:i SEMICOLON 
+				{:
+					VarDecl v = new VarDecl(t, new Identifier(i));
+					if (vl == null) vl = new VarDeclList();
+					vl.addElement(v);
+					RESULT = vl;
+				:}
+			|
+				{:
+					RESULT = new VarDeclList();
+				:}
+			|
+				error SEMICOLON
+		;
+
+MethodDecl ::=	MethodDecl:ml PUBLIC type:t IDENTIFIER:i LPAREN Formal_List:f RPAREN LBRACE VarDecl:vl Statement_List:sl RETURN Expr:e SEMICOLON RBRACE
+				{:
+					if (ml == null) ml = new MethodDeclList();
+					MethodDecl m = new MethodDecl(t, new Identifier(i), f, vl, sl, e);
+					ml.addElement(m);
+					RESULT = ml;
+				:}
+			|
+				{:	
+					RESULT = new MethodDeclList();
+				:}
+			|
+				error RBRACE
+			;
+
+Formal_List ::= type:t IDENTIFIER:i FormalRest:fr
+				{:
+					FormalList fl = new FormalList();
+					fl.addElement(new Formal(t, new Identifier(i)));
+					if (fr != null && fr.size() > 0) {
+						for (int j = 0; j < fr.size(); j++) {
+							fl.addElement(fr.elementAt(j));
+						}
+					}
+					RESULT = fl;
+				:}
+			|
+				{:
+					RESULT = new FormalList();
+				:}
+			;
+
+FormalRest ::= FormalRest:fr COMMA type:t IDENTIFIER:i
+				{:
+					if (fr == null) fr = new FormalList();
+					fr.addElement(new Formal(t, new Identifier(i)));
+					RESULT = fr;
+				:}
+			|
+				{:
+					RESULT = new FormalList();
+				:}
+		;
+
+type ::= INTEGER LBRACKET RBRACKET
+			{:
+				RESULT = new IntArrayType();
+			:}
+		|
+		  BOOLEAN
+		  	{:
+		  		RESULT = new BooleanType();
+		  	:}
+		| 
+		  INTEGER 
+		  	{:
+		  		RESULT = new IntegerType();
+		  	:}
+		|
+		  IDENTIFIER:i 
+		  	{:
+		  		RESULT = new IdentifierType(i);
+		  	:}
+	;
+
+Statement_List ::= statement:s Statement_List:sl1
+					{:
+						StatementList sl2 = new StatementList();
+						sl2.addElement(s);
+						if (sl1 != null && sl1.size() > 0) {
+							for (int j = 0; j < sl1.size(); j++) {
+								sl2.addElement(sl1.elementAt(j));
+							}
+						}
+						
+						RESULT = sl2;
+					:}
+				|
+					{:
+						RESULT = new StatementList();
+					:}
+			;
+
+statement ::= LBRACE Statement_List:sl RBRACE
+				{:
+					Block b = new Block(sl);
+					RESULT = b;
+				:}
+			|
+			  IF LPAREN Expr:e RPAREN statement:s1 ELSE statement:s2
+			  {:
+			  		If if_expr = new If(e, s1, s2);
+			  		RESULT = if_expr;
+			  :}
+			|
+			  WHILE LPAREN Expr:e RPAREN statement:s
+			  {:
+					While while_expr = new While(e, s);
+					RESULT = while_expr;
+			  :}
+			|
+			  PRINT LPAREN Expr:e RPAREN SEMICOLON
+			  {:
+			  		Print print_expr = new Print(e);
+			  		RESULT = print_expr;
+			  :}
+
+			|
+			  IDENTIFIER:i EQUALS Expr:e SEMICOLON 
+			  {:
+			  		Assign a = new Assign(new Identifier(i), e);
+			  		RESULT = a;
+			  :}
+			| 
+			  IDENTIFIER:i LBRACKET Expr:e1 RBRACKET EQUALS Expr:e2 SEMICOLON
+			  {:
+			  		ArrayAssign aa = new ArrayAssign(new Identifier(i), e1, e2);
+			  		RESULT = aa;
+			  :}
+			|
+				error SEMICOLON
+		;
+
+Expr ::= Expr:e1 AND Expr:e2
+			{: RESULT = new And(e1, e2); :}
+		| Expr:e1 PLUS Expr:e2
+			{: RESULT = new Plus(e1, e2); :}
+		| Expr:e1 MINUS Expr:e2
+			{: RESULT = new Minus(e1, e2); :}
+		| Expr:e1 TIMES Expr:e2
+			{: RESULT = new Times(e1, e2); :}
+		| Expr:e1 LESSTHAN Expr:e2
+			{: RESULT = new LessThan(e1, e2); :}
+		| Expr:e1 LBRACKET Expr:e2 RBRACKET
+			{: RESULT = new ArrayLookup(e1, e2); :}
+		| Expr:e1 PERIOD LENGTH
+			{: RESULT = new ArrayLength(e1); :}
+		| Expr:e1 PERIOD IDENTIFIER:i LPAREN ExprList:el RPAREN
+			{: RESULT = new Call(e1, new Identifier(i), el); :}
+		| INTEGER_LITERAL:i
+			{: RESULT = new IntegerLiteral(i); :}
+		| TRUE
+			{: RESULT = new True(); :}
+		| FALSE
+			{: RESULT = new False(); :}
+		| IDENTIFIER:i
+			{: RESULT = new IdentifierExp(i); :}
+		| THIS
+			{: RESULT = new This(); :}
+		| NEW INTEGER LBRACKET Expr:e RBRACKET
+			{: RESULT = new NewArray(e); :}
+		| NEW IDENTIFIER:i LPAREN RPAREN
+			{: RESULT = new NewObject(new Identifier(i)); :}
+		| EXCLAMATION Expr:e
+			{: RESULT = new Not(e); :}
+		| LPAREN Expr:e RPAREN
+			{: RESULT = e; :}
+		|
+			error RPAREN
+	;
+
+ExprList ::= Expr:e ExprRest:er
+				{:
+					ExpList el = new ExpList();
+					el.addElement(e);
+					if (er != null && er.size() > 0) {
+						for (int j = 0; j < er.size(); j++){
+							el.addElement(er.elementAt(j));
+						}
+					}
+					RESULT = el;
+				:}
+			|
+				{:
+					RESULT = new ExpList();
+				:}
+		;
+
+ExprRest ::= ExprRest:er COMMA Expr:e
+				{:
+					if (er == null) er = new ExpList();
+					er.addElement(e);
+					RESULT = er;
+				:}
+			|
+				{:
+					RESULT = new ExpList();
+				:}
+		;
+
